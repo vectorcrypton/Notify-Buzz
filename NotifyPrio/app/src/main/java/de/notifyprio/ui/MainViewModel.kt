@@ -97,6 +97,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setApp(pkg: String, action: RuleAction) = filters.setAppAction(pkg, action)
     fun setChannel(pkg: String, channelId: String, action: RuleAction) =
         filters.setChannelAction(pkg, channelId, action)
+    fun setManualAppCategories(pkg: String, categories: Set<AppCategory>) =
+        filters.setManualAppCategories(pkg, categories.mapTo(mutableSetOf()) { it.name })
 
     fun setFocus(mode: FocusMode) = filters.setFocusMode(mode)
     fun setMirrorDnd(enabled: Boolean) = filters.setMirrorSystemDnd(enabled)

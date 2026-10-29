@@ -67,6 +67,15 @@ class FilterManager private constructor(context: Context) {
         s.copy(channelActions = if (action == RuleAction.DEFAULT) s.channelActions - key else s.channelActions + (key to action))
     }
 
+    fun setManualAppCategories(pkg: String, categories: Set<String>) = update { s ->
+        val updated = if (categories.isEmpty()) {
+            s.manualAppCategories - pkg
+        } else {
+            s.manualAppCategories + (pkg to categories)
+        }
+        s.copy(manualAppCategories = updated)
+    }
+
     fun setFocusMode(mode: FocusMode) {
         update { it.copy(focusMode = mode) }
         DndController.apply(appContext, mode, _state.value.mirrorSystemDnd)
@@ -108,6 +117,10 @@ class FilterManager private constructor(context: Context) {
         s.appActions.forEach { (k, v) -> apps.put(k, v.name) }
         val channels = JSONObject()
         s.channelActions.forEach { (k, v) -> channels.put(k, v.name) }
+        val manualCategories = JSONObject()
+        s.manualAppCategories.forEach { (pkg, categories) ->
+            manualCategories.put(pkg, JSONArray(categories.toList()))
+        }
 
         val root = JSONObject()
             .put("focus", s.focusMode.name)
@@ -115,6 +128,7 @@ class FilterManager private constructor(context: Context) {
             .put("apps", apps)
             .put("channels", channels)
             .put("known", known)
+            .put("manualCategories", manualCategories)
         prefs.edit().putString("state", root.toString()).apply()
     }
 
@@ -132,12 +146,24 @@ class FilterManager private constructor(context: Context) {
                     }
                 }
             }
+            val manualCategories = LinkedHashMap<String, Set<String>>()
+            o.optJSONObject("manualCategories")?.let { categories ->
+                categories.keys().forEach { pkg ->
+                    val array = categories.optJSONArray(pkg) ?: return@forEach
+                    manualCategories[pkg] = buildSet {
+                        for (index in 0 until array.length()) {
+                            array.optString(index).takeIf(String::isNotBlank)?.let(::add)
+                        }
+                    }
+                }
+            }
             RulesState(
                 focusMode = enumOr(o.optString("focus"), FocusMode.OFF),
                 mirrorSystemDnd = o.optBoolean("mirror", false),
                 appActions = o.optJSONObject("apps").toActionMap(),
                 channelActions = o.optJSONObject("channels").toActionMap(),
                 knownChannels = known,
+                manualAppCategories = manualCategories,
             )
         }.getOrDefault(RulesState())
     }

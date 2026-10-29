@@ -92,6 +92,7 @@ fun AppRoot(
                     apps = apps,
                     onApp = vm::setApp,
                     onChannel = vm::setChannel,
+                    onCategories = vm::setManualAppCategories,
                 )
                 1 -> FocusScreen(
                     rules = rules,

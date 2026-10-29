@@ -51,6 +51,7 @@ fun AppsScreen(
     apps: List<AppEntry>,
     onApp: (String, RuleAction) -> Unit,
     onChannel: (String, String, RuleAction) -> Unit,
+    onCategories: (String, Set<AppCategory>) -> Unit,
 ) {
     val context = LocalContext.current
     var query by rememberSaveable { mutableStateOf("") }
@@ -75,14 +76,22 @@ fun AppsScreen(
     fun hasRule(pkg: String) =
         rules.appActions.containsKey(pkg) || rules.channelActions.keys.any { it.startsWith("$pkg|") }
 
-    val categorizedApps = remember(allApps) {
-        allApps.map { app -> app to AppCategory.forApp(app) }
+    val categorizedApps = remember(allApps, rules.manualAppCategories) {
+        allApps.map { app ->
+            val manual = rules.manualAppCategories[app.pkg].orEmpty()
+                .mapNotNullTo(mutableSetOf()) { name -> AppCategory.entries.firstOrNull { it.name == name } }
+            val automatic = AppCategory.forApp(app)
+            val categories = (automatic + manual).let { combined ->
+                if (manual.any { it != AppCategory.OTHER }) combined - AppCategory.OTHER else combined
+            }
+            Triple(app, categories, manual)
+        }
     }
     val availableCategories = remember(categorizedApps) {
         AppCategory.entries.filter { category -> categorizedApps.any { category in it.second } }
     }
     val categoryFilter = AppCategory.entries.firstOrNull { it.name == selectedCategory }
-    val shown = categorizedApps.filter { (app, categories) ->
+    val shown = categorizedApps.filter { (app, categories, _) ->
         (query.isBlank() || app.label.contains(query, ignoreCase = true) || app.pkg.contains(query, ignoreCase = true)) &&
             (!onlyWithRules || hasRule(app.pkg)) &&
             (categoryFilter == null || categoryFilter in categories)
@@ -153,15 +162,17 @@ fun AppsScreen(
                     )
                 }
             } else {
-                items(shown, key = { it.first.pkg }) { (app, categories) ->
+                items(shown, key = { it.first.pkg }) { (app, categories, manualCategories) ->
                     AppRow(
                         app = app,
                         categories = categories,
+                        manualCategories = manualCategories,
                         rules = rules,
                         expanded = expanded == app.pkg,
                         onToggle = { expanded = if (expanded == app.pkg) null else app.pkg },
                         onApp = onApp,
                         onChannel = onChannel,
+                        onCategories = onCategories,
                     )
                 }
             }
@@ -173,11 +184,13 @@ fun AppsScreen(
 private fun AppRow(
     app: AppEntry,
     categories: Set<AppCategory>,
+    manualCategories: Set<AppCategory>,
     rules: RulesState,
     expanded: Boolean,
     onToggle: () -> Unit,
     onApp: (String, RuleAction) -> Unit,
     onChannel: (String, String, RuleAction) -> Unit,
+    onCategories: (String, Set<AppCategory>) -> Unit,
 ) {
     val context = LocalContext.current
     val action = rules.appActions[app.pkg] ?: RuleAction.DEFAULT
@@ -223,6 +236,41 @@ private fun AppRow(
                 exit = fadeOut(),
             ) {
                 Column {
+                    val automaticCategories = AppCategory.forApp(app).filter { it != AppCategory.OTHER }
+                    Text("Automatisch erkannt", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        automaticCategories.takeIf { it.isNotEmpty() }?.joinToString { it.label }
+                            ?: "Keine passende Kategorie erkannt",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text("Manuell ergänzen", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        "Markierte Kategorien werden dauerhaft zusätzlich zugeordnet.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    LazyRow(
+                        contentPadding = PaddingValues(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(AppCategory.entries, key = { it.name }) { category ->
+                            FilterChip(
+                                selected = category in manualCategories,
+                                onClick = {
+                                    val updated = if (category in manualCategories) {
+                                        manualCategories - category
+                                    } else {
+                                        manualCategories + category
+                                    }
+                                    onCategories(app.pkg, updated)
+                                },
+                                label = { Text(category.label) },
+                            )
+                        }
+                    }
+
                     Spacer(Modifier.height(12.dp))
                     Text("Ganze App", style = MaterialTheme.typography.labelMedium)
                     Spacer(Modifier.height(4.dp))

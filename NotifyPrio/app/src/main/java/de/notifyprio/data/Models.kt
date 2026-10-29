@@ -23,6 +23,8 @@ data class RulesState(
     val channelActions: Map<String, RuleAction> = emptyMap(),
     /** Aus eingehenden Benachrichtigungen gelernte Kanäle: paket -> Kanäle */
     val knownChannels: Map<String, List<ChannelInfo>> = emptyMap(),
+    /** Manuelle Ergänzungen zu den automatisch erkannten Kategorien: paket -> Kategorienamen */
+    val manualAppCategories: Map<String, Set<String>> = emptyMap(),
 )
 
 data class CapturedNotification(
