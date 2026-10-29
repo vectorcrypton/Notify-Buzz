@@ -1,5 +1,7 @@
 # NotifyPrio – Benachrichtigungen priorisieren & bündeln
 
+[APK herunterladen](NotifyPrio/app/build/outputs/apk/debug/app-debug.apk)
+
 Kotlin + Jetpack Compose · Ziel: POCO X7 · HyperOS 3.0 (Android 16) · `compileSdk/targetSdk 36` · kein Root.
 
 ## Was die App tut
