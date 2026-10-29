@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.PowerManager
@@ -25,6 +26,14 @@ object SetupHelper {
         val pm = ctx.packageManager
         pm.getApplicationLabel(pm.getApplicationInfo(pkg, PackageManager.ApplicationInfoFlags.of(0))).toString()
     }.getOrDefault(pkg)
+
+    fun categoryOf(ctx: Context, pkg: String): Int = try {
+        ctx.packageManager
+            .getApplicationInfo(pkg, PackageManager.ApplicationInfoFlags.of(0))
+            .category
+    } catch (_: PackageManager.NameNotFoundException) {
+        ApplicationInfo.CATEGORY_UNDEFINED
+    }
 
     // ------------------------------------------------------------- Sprünge
 

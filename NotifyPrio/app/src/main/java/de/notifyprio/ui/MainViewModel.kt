@@ -24,7 +24,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-data class AppEntry(val pkg: String, val label: String)
+data class AppEntry(
+    val pkg: String,
+    val label: String,
+    val platformCategory: Int = -1,
+)
 
 data class SetupStatus(
     val listenerEnabled: Boolean,
@@ -60,7 +64,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val pm = ctx.packageManager
             val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
             _apps.value = pm.queryIntentActivities(launcher, PackageManager.ResolveInfoFlags.of(0))
-                .map { AppEntry(it.activityInfo.packageName, it.loadLabel(pm).toString()) }
+                .map {
+                    AppEntry(
+                        pkg = it.activityInfo.packageName,
+                        label = it.loadLabel(pm).toString(),
+                        platformCategory = it.activityInfo.applicationInfo.category,
+                    )
+                }
                 .filter { it.pkg != ctx.packageName }
                 .distinctBy { it.pkg }
         }

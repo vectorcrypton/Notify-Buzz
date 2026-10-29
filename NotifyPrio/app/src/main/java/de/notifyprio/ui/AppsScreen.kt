@@ -62,7 +62,13 @@ fun AppsScreen(
     val allApps = remember(apps, rules.knownChannels.keys) {
         val known = rules.knownChannels.keys
             .filter { pkg -> apps.none { it.pkg == pkg } }
-            .map { AppEntry(it, SetupHelper.labelOf(context, it)) }
+            .map { pkg ->
+                AppEntry(
+                    pkg = pkg,
+                    label = SetupHelper.labelOf(context, pkg),
+                    platformCategory = SetupHelper.categoryOf(context, pkg),
+                )
+            }
         (apps + known).sortedBy { it.label.lowercase() }
     }
 
