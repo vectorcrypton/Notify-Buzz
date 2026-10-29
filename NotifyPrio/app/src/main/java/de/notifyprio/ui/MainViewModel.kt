@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.notifyprio.data.CapturedNotification
+import de.notifyprio.data.DEFAULT_GROUP_ID
 import de.notifyprio.data.FilterManager
 import de.notifyprio.data.FocusMode
 import de.notifyprio.data.NotificationStore
@@ -95,6 +96,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Regeln
     fun setApp(pkg: String, action: RuleAction) = filters.setAppAction(pkg, action)
+    fun setApps(pkgs: Set<String>, action: RuleAction) = filters.setAppsAction(pkgs, action)
+    fun assignAppsToGroup(pkgs: Set<String>, groupId: String) {
+        filters.setAppsGroup(pkgs, groupId)
+        val ctx = getApplication<Application>()
+        store.moveBundledAppsToGroups(pkgs, filters::groupForApp).forEach { item ->
+            BundleNotifier.cancelChild(ctx, item.key)
+            BundleNotifier.postChild(ctx, item, store.contentIntent(item.key))
+        }
+        BundleNotifier.updateSummary(ctx)
+    }
+
+    fun createGroup(name: String): String? = filters.createGroup(name)
+
+    fun deleteGroup(groupId: String) {
+        val ctx = getApplication<Application>()
+        val moved = store.moveBundledGroup(groupId, DEFAULT_GROUP_ID)
+        filters.deleteGroup(groupId)
+        moved.forEach { item ->
+            BundleNotifier.cancelChild(ctx, item.key)
+            BundleNotifier.postChild(ctx, item, store.contentIntent(item.key))
+        }
+        BundleNotifier.updateSummary(ctx)
+    }
+
     fun setChannel(pkg: String, channelId: String, action: RuleAction) =
         filters.setChannelAction(pkg, channelId, action)
     fun setManualAppCategories(pkg: String, categories: Set<AppCategory>) =

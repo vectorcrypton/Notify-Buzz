@@ -50,6 +50,51 @@ class NotificationStore private constructor(context: Context) {
         persist()
     }
 
+    fun clearBundledGroup(groupId: String): List<CapturedNotification> {
+        val gone = _items.value.filter { it.outcome == Outcome.BUNDLED && it.groupId == groupId }
+        gone.forEach { intents.remove(it.key) }
+        val keys = gone.mapTo(mutableSetOf()) { it.key }
+        _items.update { old -> old.filterNot { it.key in keys } }
+        persist()
+        return gone
+    }
+
+    fun moveBundledGroup(fromGroupId: String, toGroupId: String): List<CapturedNotification> {
+        val moved = mutableListOf<CapturedNotification>()
+        _items.update { old ->
+            old.map { item ->
+                if (item.outcome == Outcome.BUNDLED && item.groupId == fromGroupId) {
+                    item.copy(groupId = toGroupId).also(moved::add)
+                } else {
+                    item
+                }
+            }
+        }
+        if (moved.isNotEmpty()) persist()
+        return moved
+    }
+
+    fun moveBundledAppsToGroups(
+        packages: Set<String>,
+        groupForPackage: (String) -> String,
+    ): List<CapturedNotification> {
+        val moved = mutableListOf<CapturedNotification>()
+        _items.update { old ->
+            old.map { item ->
+                if (item.outcome == Outcome.BUNDLED && item.packageName in packages) {
+                    val groupId = groupForPackage(item.packageName)
+                    if (item.groupId != groupId) item.copy(groupId = groupId).also(moved::add) else item
+                } else {
+                    item
+                }
+            }
+        }
+        if (moved.isNotEmpty()) persist()
+        return moved
+    }
+
+    fun contentIntent(key: String): PendingIntent? = intents[key]
+
     /** Behält nur gebündelte Einträge, deren Schlüssel in [keys] vorkommt (Abgleich mit der Leiste). */
     fun retainBundled(keys: Set<String>) {
         val before = _items.value
@@ -111,6 +156,7 @@ class NotificationStore private constructor(context: Context) {
                     .put("text", it.text)
                     .put("time", it.postTime)
                     .put("outcome", it.outcome.name)
+                    .put("groupId", it.groupId)
             )
         }
         prefs.edit().putString("items", arr.toString()).apply()
@@ -132,6 +178,7 @@ class NotificationStore private constructor(context: Context) {
                     text = o.optString("text"),
                     postTime = o.optLong("time"),
                     outcome = runCatching { Outcome.valueOf(o.getString("outcome")) }.getOrDefault(Outcome.BUNDLED),
+                    groupId = o.optString("groupId", DEFAULT_GROUP_ID),
                 )
             }
         }.getOrDefault(emptyList())

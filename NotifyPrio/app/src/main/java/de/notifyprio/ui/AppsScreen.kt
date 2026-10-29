@@ -21,7 +21,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,8 +43,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.notifyprio.data.FilterManager
+import de.notifyprio.data.DEFAULT_GROUP_ID
+import de.notifyprio.data.DEFAULT_GROUP_NAME
 import de.notifyprio.data.RuleAction
 import de.notifyprio.data.RulesState
+import de.notifyprio.data.NotificationGroup
 import de.notifyprio.system.SetupHelper
 
 @Composable
@@ -50,6 +55,9 @@ fun AppsScreen(
     rules: RulesState,
     apps: List<AppEntry>,
     onApp: (String, RuleAction) -> Unit,
+    onAssignApps: (Set<String>, String) -> Unit,
+    onCreateGroup: (String) -> String?,
+    onDeleteGroup: (String) -> Unit,
     onChannel: (String, String, RuleAction) -> Unit,
     onCategories: (String, Set<AppCategory>) -> Unit,
 ) {
@@ -58,6 +66,14 @@ fun AppsScreen(
     var onlyWithRules by rememberSaveable { mutableStateOf(false) }
     var selectedCategory by rememberSaveable { mutableStateOf<String?>(null) }
     var expanded by rememberSaveable { mutableStateOf<String?>(null) }
+    var multiSelect by rememberSaveable { mutableStateOf(false) }
+    var selectedApps by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    var selectedGroupId by rememberSaveable { mutableStateOf(DEFAULT_GROUP_ID) }
+    var showCreateGroup by rememberSaveable { mutableStateOf(false) }
+    var showDeleteGroup by rememberSaveable { mutableStateOf(false) }
+    var newGroupName by rememberSaveable { mutableStateOf("") }
+    var groupNameError by rememberSaveable { mutableStateOf(false) }
+    val groups = listOf(NotificationGroup(DEFAULT_GROUP_ID, DEFAULT_GROUP_NAME)) + rules.notificationGroups
 
     // Launcher-Apps + Apps, von denen wir bereits Benachrichtigungen gesehen haben
     val allApps = remember(apps, rules.knownChannels.keys) {
@@ -116,6 +132,44 @@ fun AppsScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.padding(top = 8.dp),
         ) {
+            item(key = "create-group") {
+                FilterChip(
+                    selected = false,
+                    onClick = {
+                        newGroupName = ""
+                        groupNameError = false
+                        showCreateGroup = true
+                    },
+                    label = { Text("+ Gruppe") },
+                )
+            }
+            items(groups, key = { it.id }) { group ->
+                FilterChip(
+                    selected = selectedGroupId == group.id,
+                    onClick = { selectedGroupId = group.id },
+                    label = { Text(group.name) },
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Apps ohne Zuordnung werden in „$DEFAULT_GROUP_NAME“ gebündelt.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            if (selectedGroupId != DEFAULT_GROUP_ID) {
+                TextButton(onClick = { showDeleteGroup = true }) { Text("Gruppe löschen") }
+            }
+        }
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(top = 8.dp),
+        ) {
             item(key = "all") {
                 FilterChip(
                     selected = selectedCategory == null,
@@ -146,6 +200,40 @@ fun AppsScreen(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            TextButton(
+                onClick = {
+                    multiSelect = !multiSelect
+                    selectedApps = emptySet()
+                    if (multiSelect) expanded = null
+                },
+            ) {
+                Text(if (multiSelect) "Auswahl beenden" else "Mehrere wählen")
+            }
+        }
+        if (multiSelect) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${selectedApps.size} ausgewählt",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = {
+                            onAssignApps(selectedApps, selectedGroupId)
+                            selectedApps = emptySet()
+                        },
+                        enabled = selectedApps.isNotEmpty(),
+                    ) {
+                        Text("Zu „${groups.firstOrNull { it.id == selectedGroupId }?.name ?: DEFAULT_GROUP_NAME}“")
+                    }
+                }
+                Text(
+                    "Ausgewählte Apps werden in dieser Gruppe gebündelt. Kanalregeln bleiben bestehen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         LazyColumn(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
@@ -168,14 +256,91 @@ fun AppsScreen(
                         categories = categories,
                         manualCategories = manualCategories,
                         rules = rules,
-                        expanded = expanded == app.pkg,
+                        expanded = !multiSelect && expanded == app.pkg,
+                        multiSelect = multiSelect,
+                        selected = app.pkg in selectedApps,
                         onToggle = { expanded = if (expanded == app.pkg) null else app.pkg },
+                        onSelect = {
+                            selectedApps = if (app.pkg in selectedApps) {
+                                selectedApps - app.pkg
+                            } else {
+                                selectedApps + app.pkg
+                            }
+                        },
                         onApp = onApp,
                         onChannel = onChannel,
                         onCategories = onCategories,
                     )
                 }
             }
+
+        }
+
+        if (showCreateGroup) {
+            AlertDialog(
+                onDismissRequest = { showCreateGroup = false },
+                title = { Text("Neue Gruppe") },
+                text = {
+                    Column {
+                        OutlinedTextField(
+                            value = newGroupName,
+                            onValueChange = {
+                                newGroupName = it.take(32)
+                                groupNameError = false
+                            },
+                            label = { Text("Gruppenname") },
+                            singleLine = true,
+                            isError = groupNameError,
+                        )
+                        if (groupNameError) {
+                            Text(
+                                "Bitte einen neuen, eindeutigen Namen eingeben.",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val id = onCreateGroup(newGroupName)
+                            if (id == null) {
+                                groupNameError = true
+                            } else {
+                                selectedGroupId = id
+                                showCreateGroup = false
+                            }
+                        },
+                    ) { Text("Erstellen") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCreateGroup = false }) { Text("Abbrechen") }
+                },
+            )
+        }
+
+        if (showDeleteGroup) {
+            val groupName = groups.firstOrNull { it.id == selectedGroupId }?.name ?: DEFAULT_GROUP_NAME
+            AlertDialog(
+                onDismissRequest = { showDeleteGroup = false },
+                title = { Text("Gruppe löschen?") },
+                text = {
+                    Text("„$groupName“ wird entfernt. Zugeordnete Apps und vorhandene Meldungen wechseln zu „$DEFAULT_GROUP_NAME“.")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onDeleteGroup(selectedGroupId)
+                            selectedGroupId = DEFAULT_GROUP_ID
+                            showDeleteGroup = false
+                        },
+                    ) { Text("Löschen") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteGroup = false }) { Text("Abbrechen") }
+                },
+            )
         }
     }
 }
@@ -187,7 +352,10 @@ private fun AppRow(
     manualCategories: Set<AppCategory>,
     rules: RulesState,
     expanded: Boolean,
+    multiSelect: Boolean,
+    selected: Boolean,
     onToggle: () -> Unit,
+    onSelect: () -> Unit,
     onApp: (String, RuleAction) -> Unit,
     onChannel: (String, String, RuleAction) -> Unit,
     onCategories: (String, Set<AppCategory>) -> Unit,
@@ -200,7 +368,7 @@ private fun AppRow(
         Column(Modifier.padding(12.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle),
+                modifier = Modifier.fillMaxWidth().clickable(onClick = if (multiSelect) onSelect else onToggle),
             ) {
                 AppIcon(app.pkg)
                 Spacer(Modifier.width(12.dp))
@@ -226,8 +394,23 @@ private fun AppRow(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    rules.appGroups[app.pkg]?.let { groupId ->
+                        rules.notificationGroups.firstOrNull { it.id == groupId }?.let { group ->
+                            Text(
+                                "Gruppe: ${group.name}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
-                Text(if (expanded) "▲" else "▼", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (multiSelect) {
+                    Checkbox(checked = selected, onCheckedChange = { onSelect() })
+                } else {
+                    Text(if (expanded) "▲" else "▼", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
 
             AnimatedVisibility(

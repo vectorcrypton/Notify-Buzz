@@ -9,7 +9,14 @@ import de.notifyprio.data.NotificationStore
 class BundleActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != BundleNotifier.ACTION_CLEAR) return
-        NotificationStore.get(context).clearBundled(null)
-        BundleNotifier.cancelAll(context)
+        val groupId = intent.getStringExtra(BundleNotifier.EXTRA_GROUP_ID)
+        if (groupId == null) {
+            NotificationStore.get(context).clearBundled(null)
+            BundleNotifier.cancelAll(context)
+        } else {
+            NotificationStore.get(context).clearBundledGroup(groupId)
+                .forEach { BundleNotifier.cancelChild(context, it.key) }
+            BundleNotifier.updateSummary(context)
+        }
     }
 }

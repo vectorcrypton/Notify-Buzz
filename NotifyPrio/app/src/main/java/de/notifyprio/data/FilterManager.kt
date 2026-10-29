@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
 /**
  * Zentrale Regel-Logik: speichert App-/Kanal-Regeln und den Fokus-Modus
@@ -61,6 +62,46 @@ class FilterManager private constructor(context: Context) {
     fun setAppAction(pkg: String, action: RuleAction) = update { s ->
         s.copy(appActions = if (action == RuleAction.DEFAULT) s.appActions - pkg else s.appActions + (pkg to action))
     }
+
+    fun setAppsAction(pkgs: Set<String>, action: RuleAction) = update { s ->
+        val actions = s.appActions.toMutableMap()
+        pkgs.forEach { pkg ->
+            if (action == RuleAction.DEFAULT) actions.remove(pkg) else actions[pkg] = action
+        }
+        s.copy(appActions = actions)
+    }
+
+    fun setAppsGroup(pkgs: Set<String>, groupId: String) = update { s ->
+        val actions = s.appActions + pkgs.associateWith { RuleAction.BUNDLE }
+        val groups = s.appGroups.toMutableMap()
+        pkgs.forEach { pkg ->
+            if (groupId == DEFAULT_GROUP_ID) groups.remove(pkg) else groups[pkg] = groupId
+        }
+        s.copy(appActions = actions, appGroups = groups)
+    }
+
+    fun createGroup(name: String): String? {
+        val cleanName = name.trim()
+        if (cleanName.isEmpty() || cleanName.equals(DEFAULT_GROUP_NAME, ignoreCase = true) ||
+            _state.value.notificationGroups.any { it.name.equals(cleanName, ignoreCase = true) }
+        ) return null
+        val id = UUID.randomUUID().toString()
+        update { s -> s.copy(notificationGroups = s.notificationGroups + NotificationGroup(id, cleanName)) }
+        return id
+    }
+
+    fun deleteGroup(groupId: String) = update { s ->
+        if (groupId == DEFAULT_GROUP_ID) return@update s
+        s.copy(
+            notificationGroups = s.notificationGroups.filterNot { it.id == groupId },
+            appGroups = s.appGroups.filterValues { it != groupId },
+        )
+    }
+
+    fun groupForApp(pkg: String): String =
+        _state.value.appGroups[pkg]?.takeIf { id ->
+            _state.value.notificationGroups.any { it.id == id }
+        } ?: DEFAULT_GROUP_ID
 
     fun setChannelAction(pkg: String, channelId: String, action: RuleAction) = update { s ->
         val key = channelKey(pkg, channelId)
@@ -121,6 +162,12 @@ class FilterManager private constructor(context: Context) {
         s.manualAppCategories.forEach { (pkg, categories) ->
             manualCategories.put(pkg, JSONArray(categories.toList()))
         }
+        val groups = JSONArray()
+        s.notificationGroups.forEach { group ->
+            groups.put(JSONObject().put("id", group.id).put("name", group.name))
+        }
+        val appGroups = JSONObject()
+        s.appGroups.forEach { (pkg, groupId) -> appGroups.put(pkg, groupId) }
 
         val root = JSONObject()
             .put("focus", s.focusMode.name)
@@ -129,6 +176,8 @@ class FilterManager private constructor(context: Context) {
             .put("channels", channels)
             .put("known", known)
             .put("manualCategories", manualCategories)
+            .put("notificationGroups", groups)
+            .put("appGroups", appGroups)
         prefs.edit().putString("state", root.toString()).apply()
     }
 
@@ -157,6 +206,16 @@ class FilterManager private constructor(context: Context) {
                     }
                 }
             }
+            val groups = o.optJSONArray("notificationGroups")?.let { array ->
+                List(array.length()) { index ->
+                    val group = array.getJSONObject(index)
+                    NotificationGroup(group.getString("id"), group.getString("name"))
+                }
+            }.orEmpty()
+            val appGroups = LinkedHashMap<String, String>()
+            o.optJSONObject("appGroups")?.let { stored ->
+                stored.keys().forEach { pkg -> appGroups[pkg] = stored.getString(pkg) }
+            }
             RulesState(
                 focusMode = enumOr(o.optString("focus"), FocusMode.OFF),
                 mirrorSystemDnd = o.optBoolean("mirror", false),
@@ -164,6 +223,8 @@ class FilterManager private constructor(context: Context) {
                 channelActions = o.optJSONObject("channels").toActionMap(),
                 knownChannels = known,
                 manualAppCategories = manualCategories,
+                notificationGroups = groups,
+                appGroups = appGroups,
             )
         }.getOrDefault(RulesState())
     }

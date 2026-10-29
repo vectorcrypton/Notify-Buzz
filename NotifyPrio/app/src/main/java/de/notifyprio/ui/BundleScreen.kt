@@ -33,11 +33,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.notifyprio.data.CapturedNotification
+import de.notifyprio.data.DEFAULT_GROUP_ID
+import de.notifyprio.data.DEFAULT_GROUP_NAME
 import de.notifyprio.data.Outcome
 
 @Composable
 fun BundleScreen(
     captured: List<CapturedNotification>,
+    groupNames: Map<String, String>,
     onOpen: (CapturedNotification) -> Unit,
     onDismiss: (CapturedNotification) -> Unit,
     onClear: (Outcome) -> Unit,
@@ -86,7 +89,13 @@ fun BundleScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(shown, key = { it.key }) { item ->
-                    CapturedRow(item, onOpen = { onOpen(item) }, onDismiss = { onDismiss(item) })
+                    CapturedRow(
+                        item,
+                        groupName = if (item.groupId == DEFAULT_GROUP_ID) DEFAULT_GROUP_NAME
+                        else groupNames[item.groupId] ?: DEFAULT_GROUP_NAME,
+                        onOpen = { onOpen(item) },
+                        onDismiss = { onDismiss(item) },
+                    )
                 }
             }
         }
@@ -94,7 +103,7 @@ fun BundleScreen(
 }
 
 @Composable
-private fun CapturedRow(item: CapturedNotification, onOpen: () -> Unit, onDismiss: () -> Unit) {
+private fun CapturedRow(item: CapturedNotification, groupName: String, onOpen: () -> Unit, onDismiss: () -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.clickable(onClick = onOpen).padding(12.dp),
@@ -106,7 +115,7 @@ private fun CapturedRow(item: CapturedNotification, onOpen: () -> Unit, onDismis
                 val whenText = DateUtils.getRelativeTimeSpanString(item.postTime).toString()
                 val channel = item.channelName?.let { " · $it" }.orEmpty()
                 Text(
-                    "${item.appLabel}$channel · $whenText",
+                    "${item.appLabel}$channel · $groupName · $whenText",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

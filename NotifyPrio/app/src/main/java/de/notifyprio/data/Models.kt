@@ -14,6 +14,8 @@ enum class Outcome { BUNDLED, SUPPRESSED }
 
 data class ChannelInfo(val id: String, val name: String)
 
+data class NotificationGroup(val id: String, val name: String)
+
 data class RulesState(
     val focusMode: FocusMode = FocusMode.OFF,
     /** Fokus/Ruhe zusätzlich im System-"Nicht stören" spiegeln (braucht DND-Zugriff). */
@@ -25,6 +27,9 @@ data class RulesState(
     val knownChannels: Map<String, List<ChannelInfo>> = emptyMap(),
     /** Manuelle Ergänzungen zu den automatisch erkannten Kategorien: paket -> Kategorienamen */
     val manualAppCategories: Map<String, Set<String>> = emptyMap(),
+    val notificationGroups: List<NotificationGroup> = emptyList(),
+    /** Paket -> eigene Gruppe. Nicht zugeordnete Apps verwenden die Standardgruppe. */
+    val appGroups: Map<String, String> = emptyMap(),
 )
 
 data class CapturedNotification(
@@ -37,4 +42,8 @@ data class CapturedNotification(
     val text: String,
     val postTime: Long,
     val outcome: Outcome,
+    val groupId: String = DEFAULT_GROUP_ID,
 )
+
+const val DEFAULT_GROUP_ID = "default"
+const val DEFAULT_GROUP_NAME = "Weitere Apps"

@@ -9,6 +9,7 @@ import android.service.notification.NotificationListenerService.Ranking
 import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
 import de.notifyprio.data.CapturedNotification
+import de.notifyprio.data.DEFAULT_GROUP_ID
 import de.notifyprio.data.Decision
 import de.notifyprio.data.FilterManager
 import de.notifyprio.data.NotificationStore
@@ -120,6 +121,7 @@ class PriorityListenerService : NotificationListenerService() {
             text = text.take(400),
             postTime = sbn.postTime,
             outcome = outcome,
+            groupId = if (outcome == Outcome.BUNDLED) FilterManager.get(this).groupForApp(sbn.packageName) else DEFAULT_GROUP_ID,
         )
         NotificationStore.get(this).upsert(item, n.contentIntent)
         cancelNotification(sbn.key)

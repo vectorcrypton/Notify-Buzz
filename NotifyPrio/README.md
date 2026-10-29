@@ -7,12 +7,14 @@ Kotlin + Jetpack Compose · Ziel: POCO X7 · HyperOS 3.0 (Android 16) · `compil
 - **App- & Kanal-Regeln** pro App und pro Notification-Channel: *Normal · Wichtig · Bündeln · Blocken*.
   Kanal-Regel schlägt App-Regel (z. B. „App blocken, nur Kanal ‚Nachrichten‘ wichtig“).
 - **Apps finden & sortieren**: Suche, Filter nach Kategorien (z. B. Musik, Shopping, Social, Finanzen oder Reisen)
-  und „Nur mit Regel“. Apps können mehreren Kategorien angehören und erscheinen unter jedem passenden Filter.
+  und „Nur mit Regel“. Beliebig viele benannte Gruppen lassen sich anlegen; Apps können jeweils einer Gruppe
+  zugewiesen werden. Die Benachrichtigungen jeder Gruppe erscheinen gemeinsam in einer eigenen Zusammenfassung.
+  Apps ohne Zuordnung landen in „Weitere Apps“.
 - **Material You**: dynamische Systemfarben mit animiertem Auf- und Zuklappen der App-Karten.
 - **Fokus-Modi**: *Aus* · *Fokus* (nur „Wichtig“ kommt durch, Rest wird still gebündelt) · *Ruhe* (Rest wird entfernt, im Protokoll abrufbar).
   Optional wird der Modus ins System-„Nicht stören“ gespiegelt.
 - **Bündeln (app-übergreifend)**: Jede abgefangene Meldung wird als *eigene Karte* neu gepostet
-  (App-Icon, Titel, Text, Zeit) und hängt unter **einer** Gruppe – egal von welcher App sie kommt.
+  (App-Icon, Titel, Text, Zeit) und hängt unter der Zusammenfassung ihrer App-Gruppe.
   Auf-/Zuklappen übernimmt HyperOS (wie bei „Reddit(2)“). Ein Tipp auf eine Karte löst direkt die
   **Original-Aktion** der Ursprungs-App aus; Wegwischen entfernt sie aus dem Bündel.
   Die Tab-Liste „Bündel“ zeigt dieselben Einträge zusätzlich in der App.

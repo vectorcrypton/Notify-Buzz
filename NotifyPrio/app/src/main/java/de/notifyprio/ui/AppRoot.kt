@@ -91,6 +91,9 @@ fun AppRoot(
                     rules = rules,
                     apps = apps,
                     onApp = vm::setApp,
+                    onAssignApps = vm::assignAppsToGroup,
+                    onCreateGroup = vm::createGroup,
+                    onDeleteGroup = vm::deleteGroup,
                     onChannel = vm::setChannel,
                     onCategories = vm::setManualAppCategories,
                 )
@@ -102,6 +105,7 @@ fun AppRoot(
                 )
                 2 -> BundleScreen(
                     captured = items,
+                    groupNames = rules.notificationGroups.associate { it.id to it.name },
                     onOpen = vm::openItem,
                     onDismiss = vm::dismissItem,
                     onClear = vm::clear,
