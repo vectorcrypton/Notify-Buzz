@@ -1,6 +1,11 @@
 package de.notifyprio.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -49,6 +55,7 @@ fun AppsScreen(
     val context = LocalContext.current
     var query by rememberSaveable { mutableStateOf("") }
     var onlyWithRules by rememberSaveable { mutableStateOf(false) }
+    var selectedCategory by rememberSaveable { mutableStateOf<String?>(null) }
     var expanded by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Launcher-Apps + Apps, von denen wir bereits Benachrichtigungen gesehen haben
@@ -62,9 +69,17 @@ fun AppsScreen(
     fun hasRule(pkg: String) =
         rules.appActions.containsKey(pkg) || rules.channelActions.keys.any { it.startsWith("$pkg|") }
 
-    val shown = allApps.filter {
-        (query.isBlank() || it.label.contains(query, ignoreCase = true) || it.pkg.contains(query, ignoreCase = true)) &&
-            (!onlyWithRules || hasRule(it.pkg))
+    val categorizedApps = remember(allApps) {
+        allApps.map { app -> app to AppCategory.forApp(app) }
+    }
+    val availableCategories = remember(categorizedApps) {
+        AppCategory.entries.filter { category -> categorizedApps.any { category in it.second } }
+    }
+    val categoryFilter = AppCategory.entries.firstOrNull { it.name == selectedCategory }
+    val shown = categorizedApps.filter { (app, categories) ->
+        (query.isBlank() || app.label.contains(query, ignoreCase = true) || app.pkg.contains(query, ignoreCase = true)) &&
+            (!onlyWithRules || hasRule(app.pkg)) &&
+            (categoryFilter == null || categoryFilter in categories)
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -81,26 +96,68 @@ fun AppsScreen(
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         )
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(top = 8.dp),
+        ) {
+            item(key = "all") {
+                FilterChip(
+                    selected = selectedCategory == null,
+                    onClick = { selectedCategory = null },
+                    label = { Text("Alle") },
+                )
+            }
+            items(availableCategories, key = { it.name }) { category ->
+                FilterChip(
+                    selected = selectedCategory == category.name,
+                    onClick = { selectedCategory = category.name },
+                    label = { Text(category.label) },
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             FilterChip(
                 selected = onlyWithRules,
                 onClick = { onlyWithRules = !onlyWithRules },
                 label = { Text("Nur mit Regel") },
             )
+            Spacer(Modifier.weight(1f))
+            Text(
+                "${shown.size} Apps",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         LazyColumn(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.weight(1f),
         ) {
-            items(shown, key = { it.pkg }) { app ->
-                AppRow(
-                    app = app,
-                    rules = rules,
-                    expanded = expanded == app.pkg,
-                    onToggle = { expanded = if (expanded == app.pkg) null else app.pkg },
-                    onApp = onApp,
-                    onChannel = onChannel,
-                )
+            if (shown.isEmpty()) {
+                item {
+                    Text(
+                        "Keine passenden Apps gefunden.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                }
+            } else {
+                items(shown, key = { it.first.pkg }) { (app, categories) ->
+                    AppRow(
+                        app = app,
+                        categories = categories,
+                        rules = rules,
+                        expanded = expanded == app.pkg,
+                        onToggle = { expanded = if (expanded == app.pkg) null else app.pkg },
+                        onApp = onApp,
+                        onChannel = onChannel,
+                    )
+                }
             }
         }
     }
@@ -109,6 +166,7 @@ fun AppsScreen(
 @Composable
 private fun AppRow(
     app: AppEntry,
+    categories: Set<AppCategory>,
     rules: RulesState,
     expanded: Boolean,
     onToggle: () -> Unit,
@@ -119,7 +177,7 @@ private fun AppRow(
     val action = rules.appActions[app.pkg] ?: RuleAction.DEFAULT
     val channels = rules.knownChannels[app.pkg].orEmpty()
 
-    Card(Modifier.fillMaxWidth()) {
+    Card(Modifier.fillMaxWidth().animateContentSize()) {
         Column(Modifier.padding(12.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -142,47 +200,60 @@ private fun AppRow(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    Text(
+                        categories.joinToString { it.label },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
                 Text(if (expanded) "▲" else "▼", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
-            if (expanded) {
-                Spacer(Modifier.height(12.dp))
-                Text("Ganze App", style = MaterialTheme.typography.labelMedium)
-                Spacer(Modifier.height(4.dp))
-                ActionSelector(selected = action, onSelect = { onApp(app.pkg, it) })
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut(),
+            ) {
+                Column {
+                    Spacer(Modifier.height(12.dp))
+                    Text("Ganze App", style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.height(4.dp))
+                    ActionSelector(selected = action, onSelect = { onApp(app.pkg, it) })
 
-                Spacer(Modifier.height(16.dp))
-                Text("Kanäle (überschreiben die App-Regel)", style = MaterialTheme.typography.labelMedium)
-                if (channels.isEmpty()) {
-                    Text(
-                        "Noch keine Kanäle bekannt – sie erscheinen, sobald die App eine Benachrichtigung sendet.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
-                channels.forEach { channel ->
-                    val channelAction =
-                        rules.channelActions[FilterManager.channelKey(app.pkg, channel.id)] ?: RuleAction.DEFAULT
-                    Column(Modifier.padding(top = 8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                channel.name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            TextButton(onClick = { SetupHelper.openChannelSettings(context, app.pkg, channel.id) }) {
-                                Text("System", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                        ActionSelector(
-                            selected = channelAction,
-                            inheritLabel = "Wie App",
-                            onSelect = { onChannel(app.pkg, channel.id, it) },
+                    Spacer(Modifier.height(16.dp))
+                    Text("Kanäle (überschreiben die App-Regel)", style = MaterialTheme.typography.labelMedium)
+                    if (channels.isEmpty()) {
+                        Text(
+                            "Noch keine Kanäle bekannt – sie erscheinen, sobald die App eine Benachrichtigung sendet.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp),
                         )
+                    }
+                    channels.forEach { channel ->
+                        val channelAction =
+                            rules.channelActions[FilterManager.channelKey(app.pkg, channel.id)] ?: RuleAction.DEFAULT
+                        Column(Modifier.padding(top = 8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    channel.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                TextButton(onClick = { SetupHelper.openChannelSettings(context, app.pkg, channel.id) }) {
+                                    Text("System", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                            ActionSelector(
+                                selected = channelAction,
+                                inheritLabel = "Wie App",
+                                onSelect = { onChannel(app.pkg, channel.id, it) },
+                            )
+                        }
                     }
                 }
             }

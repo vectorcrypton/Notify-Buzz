@@ -12,8 +12,8 @@ android {
         applicationId = "de.notifyprio.app"
         minSdk = 33          // Zielgerät: POCO X7 (Android 16). 33 = POST_NOTIFICATIONS-Ära
         targetSdk = 36       // Android 16
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
     }
 
     buildTypes {
